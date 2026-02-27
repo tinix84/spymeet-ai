@@ -11,6 +11,13 @@ SpyMeet is a sequential pipeline with four stages. Each stage is a standalone Py
                           |   CLI routing)   |  routes to correct backend
                           +--------+---------+
                                    |
+                          +--------v---------+
+                          | audio_enhance.py |  Always-on preprocessing:
+                          |  normalize       |  EBU R128, denoise, EQ,
+                          |  denoise, EQ     |  compress -> _enhanced.wav
+                          |  compress        |  (graceful fallback)
+                          +--------+---------+
+                                   |
                     +--------------+--------------+
                     |              |              |
               +-----v----+  +-----v-----+  +----v------+
@@ -53,7 +60,26 @@ SpyMeet is a sequential pipeline with four stages. Each stage is a standalone Py
 
 **Key design choice**: PowerShell (not bash) because the primary platform is Windows. The `_run_transcribe.ps1` helper exists as a machine-specific workaround for PATH issues with conda's ffmpeg on Windows.
 
-### 2. transcribe.py (Speech-to-Text)
+### 2. audio_enhance.py (Audio Preprocessing)
+
+**Responsibility**: Improve audio quality before transcription. Always-on with graceful fallback.
+
+**Processing chain** (sequential, applied to each file):
+
+| Step | Operation | Details |
+|------|-----------|---------|
+| 1 | Load | soundfile for WAV/FLAC/OGG, ffmpeg subprocess for M4A/MP4/MKV/WEBM → 16kHz mono float64 |
+| 2 | Loudness normalization | pyloudnorm EBU R128, target -16 LUFS, clip to [-1,1] |
+| 3 | Noise reduction | noisereduce spectral gating, first 1s noise profile, `stationary=True`, `prop_decrease=0.8` |
+| 4 | Speech EQ | scipy Butterworth HP 80Hz (order 4) + biquad peaking +2.5dB @ 3kHz (Audio EQ Cookbook) |
+| 5 | Dynamic compression | Feed-forward 3:1 ratio, 10ms attack, 100ms release, adaptive threshold (mean RMS + 6dB), makeup via re-normalization |
+| 6 | Save | 16-bit PCM WAV, 16kHz mono |
+
+**Integration with transcribe.py**: Enhancement runs in `main()` before backend dispatch. `enhance_audio_files()` returns `(enhanced_files, stem_map)`. The `stem_map` maps enhanced file paths to original stems so transcripts keep original filenames (not `_enhanced`). If enhancement deps are missing, transcription proceeds on raw audio.
+
+**Caching**: Skips enhancement if `_enhanced.wav` exists and is newer than the source file.
+
+### 3. transcribe.py (Speech-to-Text)
 
 **Responsibility**: Convert audio files to timestamped, speaker-labeled text segments.
 
@@ -83,7 +109,7 @@ SpyMeet is a sequential pipeline with four stages. Each stage is a standalone Py
 
 **Key gotcha**: Groq SDK returns segments as `dict`, OpenAI SDK returns objects with attributes. Code uses `isinstance(seg, dict)` to handle both.
 
-### 3. llm_process.py (LLM Post-Processing)
+### 4. llm_process.py (LLM Post-Processing)
 
 **Responsibility**: Clean transcript and generate structured summary.
 
@@ -108,7 +134,7 @@ Raw segments -> group into ~5min chunks -> send to Claude -> parse response
 
 **Model**: `claude-haiku-4-5-20251001` (fast, cheap, sufficient for correction/summary)
 
-### 4. Glossary (glossary.txt)
+### 5. Glossary (glossary.txt)
 
 Simple text file, one term per line. Optional `= description` format. Injected into both correction and summary prompts to improve domain-specific accuracy.
 
@@ -138,24 +164,9 @@ class CorrectedSegment:
 
 ## Planned Architecture Changes
 
-### Phase 1: Audio Enhancement (audio_enhance.py)
+### ~~Phase 1: Audio Enhancement~~ — IMPLEMENTED
 
-New module inserted between audio input and transcription:
-
-```
-Audio -> audio_enhance.py -> [name]_enhanced.wav -> transcribe.py -> ...
-```
-
-Processing chain (sequential, always-on):
-1. Load audio (soundfile/librosa)
-2. Loudness normalization (EBU R128, target -16 LUFS for speech)
-3. Noise reduction (spectral gating, noisereduce library)
-4. Speech EQ (highpass 80Hz + presence boost 2-4kHz, scipy.signal)
-5. Dynamic compression (3:1 ratio, adaptive threshold)
-6. Save enhanced file (16-bit PCM, 16kHz mono WAV)
-7. Log before/after metrics (LUFS, peak dB, estimated SNR)
-
-Integration: `transcribe.py` calls `audio_enhance.py` before processing. Both original and enhanced files are preserved.
+See section "2. audio_enhance.py" above.
 
 ### Phase 2: Batch Processing
 
@@ -201,7 +212,7 @@ spymeet/
   _run_transcribe.ps1   # Machine-specific helper (gitignored)
   transcribe.py         # Speech-to-text engine
   llm_process.py        # LLM correction + summary
-  audio_enhance.py      # (planned) Audio preprocessing
+  audio_enhance.py      # Audio preprocessing (always-on)
   batch_report.py       # (planned) Cross-meeting analytics
   speaker_profiles.py   # (planned) Voice enrollment + matching
   audio/                # Input audio files (gitignored)

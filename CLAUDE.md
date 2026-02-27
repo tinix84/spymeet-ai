@@ -10,7 +10,7 @@ SpyMeet is a meeting audio transcription pipeline: audio -> (optional) audio enh
 
 ```
 Audio files (./audio/)
-    -> audio_enhance.py   (planned: normalize, denoise, EQ, compress)
+    -> audio_enhance.py   (always-on: normalize, denoise, EQ, compress)
     -> [name]_enhanced.wav
     -> transcribe.py      (speech-to-text: WhisperX CPU / OpenAI API / Groq API)
     -> [name].txt + [name].json  (in ./audio/transcripts/)
@@ -18,7 +18,9 @@ Audio files (./audio/)
     -> [name]_corrected.txt + [name]_summary.md + [name]_metrics.md
 ```
 
-**transcribe.py** -- Three backends: `cpu` (WhisperX local), `openai-api` (cloud), `groq-api` (free tier). Speaker diarization only available with WhisperX + HF_TOKEN. Groq API returns segments as dicts (not objects) -- use `isinstance(seg, dict)` checks.
+**audio_enhance.py** -- Always-on audio preprocessing. Chain: load (soundfile/ffmpeg) -> EBU R128 normalization (-16 LUFS) -> spectral gating noise reduction -> speech EQ (HP 80Hz + peak 3kHz) -> dynamic compression (3:1). Output: 16-bit PCM WAV, 16kHz mono. Graceful fallback if deps missing (pyloudnorm, noisereduce, scipy, soundfile). Skips if `_enhanced.wav` is up-to-date.
+
+**transcribe.py** -- Three backends: `cpu` (WhisperX local), `openai-api` (cloud), `groq-api` (free tier). Speaker diarization only available with WhisperX + HF_TOKEN. Groq API returns segments as dicts (not objects) -- use `isinstance(seg, dict)` checks. Enhancement runs automatically in `main()` before backend dispatch; `stem_map` ensures transcripts use original filenames.
 
 **llm_process.py** -- Two-stage Claude pipeline: (1) chunk transcript into ~5min segments, correct fillers/punctuation, retry warned segments up to 3x; (2) generate Markdown meeting summary. Uses `claude-haiku-4-5-20251001`.
 
@@ -65,3 +67,5 @@ python llm_process.py --input ./audio/transcripts/meeting.txt --glossary glossar
 - Filler words removed: Italian (allora, quindi, cioe, praticamente), German (naja, ahm, sozusagen), universal (uhm, uh)
 - Output language matches transcript language for both correction and summary
 - Audio files and transcripts are gitignored (large binaries / generated output)
+- Audio enhancement is always-on; `enhance_audio_files()` returns `(enhanced_files, stem_map)` — `stem_map` maps enhanced paths to original stems so transcripts keep original filenames
+- Enhancement deps (pyloudnorm, noisereduce, scipy, soundfile) are optional — if missing, transcribe.py falls back to raw audio with a warning

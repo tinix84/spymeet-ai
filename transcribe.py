@@ -25,6 +25,13 @@ try:
 except ImportError:
     LLM_AVAILABLE = False
 
+# Audio enhancement (optional — graceful fallback if deps missing)
+try:
+    from audio_enhance import enhance_audio_files
+    ENHANCE_AVAILABLE = True
+except ImportError:
+    ENHANCE_AVAILABLE = False
+
 SUPPORTED_EXTENSIONS = {".mp3", ".mp4", ".wav", ".m4a", ".ogg", ".flac", ".mkv", ".webm"}
 
 # OpenAI API max file size: 25MB — larger files must be chunked
@@ -83,7 +90,8 @@ def run_whisperx_cpu(
     model_name: str,
     hf_token: str,
     glossary_path,
-    skip_llm: bool
+    skip_llm: bool,
+    stem_map: dict = None
 ):
     try:
         import whisperx
@@ -160,7 +168,7 @@ def run_whisperx_cpu(
         total_elapsed = time.time() - t0
         print(f"  Completed in {total_elapsed:.0f}s")
 
-        stem = audio_path.stem
+        stem = stem_map.get(audio_path, audio_path.stem) if stem_map else audio_path.stem
         format_transcript_txt(result["segments"], output_dir / f"{stem}.txt")
         format_transcript_json(result, output_dir / f"{stem}.json")
         run_llm(stem, output_dir, glossary_path, skip_llm)
@@ -262,7 +270,8 @@ def run_openai_api(
     output_dir: Path,
     language: str,
     glossary_path,
-    skip_llm: bool
+    skip_llm: bool,
+    stem_map: dict = None
 ):
     try:
         from openai import OpenAI
@@ -289,7 +298,7 @@ def run_openai_api(
             lang_label = language or "auto"
             print(f"  Language: {lang_label} | Segments: {len(segments)}")
 
-            stem = audio_path.stem
+            stem = stem_map.get(audio_path, audio_path.stem) if stem_map else audio_path.stem
             result = {"segments": segments, "backend": "openai-api"}
             format_transcript_txt(segments, output_dir / f"{stem}.txt")
             format_transcript_json(result, output_dir / f"{stem}.json")
@@ -355,6 +364,14 @@ def main():
 
     print(f"[INFO] Found {len(audio_files)} file(s) | Backend: {args.backend}")
 
+    # Audio enhancement — always-on, graceful fallback
+    stem_map = {}
+    if ENHANCE_AVAILABLE:
+        print(f"\n[INFO] Audio enhancement: enabled")
+        audio_files, stem_map = enhance_audio_files(audio_files)
+    else:
+        print(f"\n[INFO] Audio enhancement: unavailable (install pyloudnorm, noisereduce, scipy, soundfile)")
+
     glossary_path = Path(args.glossary) if args.glossary else None
     hf_token = args.hf_token or os.environ.get("HF_TOKEN")
 
@@ -366,7 +383,8 @@ def main():
             model_name=args.model,
             hf_token=hf_token,
             glossary_path=glossary_path,
-            skip_llm=args.skip_llm
+            skip_llm=args.skip_llm,
+            stem_map=stem_map
         )
     elif args.backend == "openai-api":
         run_openai_api(
@@ -374,7 +392,8 @@ def main():
             output_dir=output_dir,
             language=args.language,
             glossary_path=glossary_path,
-            skip_llm=args.skip_llm
+            skip_llm=args.skip_llm,
+            stem_map=stem_map
         )
     elif args.backend == "groq-api":
         run_groq_api(
@@ -382,7 +401,8 @@ def main():
             output_dir=output_dir,
             language=args.language,
             glossary_path=glossary_path,
-            skip_llm=args.skip_llm
+            skip_llm=args.skip_llm,
+            stem_map=stem_map
         )
 
     print(f"\n[DONE] Output folder: {output_dir}")
@@ -395,7 +415,8 @@ def run_groq_api(
     output_dir: Path,
     language: str,
     glossary_path,
-    skip_llm: bool
+    skip_llm: bool,
+    stem_map: dict = None
 ):
     try:
         from groq import Groq
@@ -466,7 +487,7 @@ def run_groq_api(
                     c.unlink(missing_ok=True)
                 chunk_dir.rmdir()
 
-            stem = audio_path.stem
+            stem = stem_map.get(audio_path, audio_path.stem) if stem_map else audio_path.stem
             format_transcript_txt(all_segments, output_dir / f"{stem}.txt")
             format_transcript_json({"segments": all_segments, "backend": "groq-api"}, output_dir / f"{stem}.json")
             run_llm(stem, output_dir, glossary_path, skip_llm)

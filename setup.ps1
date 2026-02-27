@@ -123,6 +123,12 @@ Write-Host "[8] Installing anthropic + openai SDKs..." -ForegroundColor Yellow
 & pip install "anthropic>=0.30.0" "openai>=1.0.0" "groq>=0.9.0" --quiet
 Write-Host "    anthropic + openai + groq installed." -ForegroundColor Green
 
+# ── 9b. Install audio enhancement dependencies ──────────────────────────────
+Write-Host ""
+Write-Host "[8b] Installing audio enhancement dependencies..." -ForegroundColor Yellow
+& pip install "pyloudnorm>=0.1.0" "noisereduce>=3.0.0" "scipy>=1.10.0" "soundfile>=0.12.0" --quiet
+Write-Host "     pyloudnorm + noisereduce + scipy + soundfile installed." -ForegroundColor Green
+
 # ── 10. Verify GPU is visible to PyTorch ──────────────────────────────────────
 Write-Host ""
 Write-Host "[9] Verifying PyTorch GPU access..." -ForegroundColor Yellow
