@@ -1,0 +1,8 @@
+# Glossario tecnico — aggiungi i tuoi termini qui
+# Formato: termine semplice, oppure abbreviazione = descrizione
+# Esempi:
+inverter
+SRF-PLL
+THD = Total Harmonic Distortion
+V2G = Vehicle to Grid
+TRU = Transport Refrigeration Unit

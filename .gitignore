@@ -1,0 +1,45 @@
+# Environment & secrets
+.env
+.env.*
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+venv/
+.venv/
+
+# Audio files (large binaries)
+audio/**/*.m4a
+audio/**/*.mp3
+audio/**/*.mp4
+audio/**/*.wav
+audio/**/*.ogg
+audio/**/*.flac
+audio/**/*.mkv
+audio/**/*.webm
+audio/**/*_enhanced.*
+
+# Transcription outputs (generated)
+audio/transcripts/
+
+# Runtime config (machine-specific)
+gpu_config.json
+
+# Helper script with hardcoded paths
+_run_transcribe.ps1
+
+# Claude Code (machine-specific permissions)
+.claude/settings.local.json
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+.DS_Store
