@@ -177,23 +177,31 @@ def run_whisperx_cpu(
 # ─── BACKEND 2: OpenAI Whisper API ───────────────────────────────────────────
 
 def split_audio_ffmpeg(audio_path: Path, chunk_dir: Path, chunk_secs: int = 600) -> list:
-    """Split audio into chunks under 25MB using ffmpeg. Returns list of chunk paths."""
+    """Split audio into chunks under 25MB using ffmpeg. Returns list of chunk paths.
+
+    Uses WAV output (16kHz mono 16-bit = 1.92 MB/min, ~19 MB per 10-min chunk)
+    to avoid codec issues. Simple numbered filenames avoid path-length problems.
+    """
     import subprocess
+    import sys
     chunk_dir.mkdir(parents=True, exist_ok=True)
-    pattern = chunk_dir / f"{audio_path.stem}_%03d.mp3"
+    pattern = chunk_dir / "chunk_%03d.wav"
     cmd = [
         "ffmpeg", "-y", "-i", str(audio_path),
         "-f", "segment",
         "-segment_time", str(chunk_secs),
         "-ac", "1",           # mono
         "-ar", "16000",       # 16kHz (Whisper native)
-        "-b:a", "32k",        # low bitrate to stay under 25MB
+        "-acodec", "pcm_s16le",
         str(pattern)
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(
+        cmd, capture_output=True, text=True,
+        creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+    )
     if result.returncode != 0:
         raise RuntimeError(f"ffmpeg split failed: {result.stderr}")
-    chunks = sorted(chunk_dir.glob(f"{audio_path.stem}_*.mp3"))
+    chunks = sorted(chunk_dir.glob("chunk_*.wav"))
     return chunks
 
 

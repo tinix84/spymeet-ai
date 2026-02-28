@@ -75,6 +75,53 @@ scipy>=1.10.0
 soundfile>=0.12.0
 ```
 
+### Phase 1.5: Live Audio Capture
+
+**Goal**: Eliminate manual audio file export by capturing system audio (calls, meetings) directly from Windows.
+
+**Behavior**: Desktop app with system tray icon. Manual start/stop. Saves stereo WAV to `./audio/`. No auto-processing — user runs `run.ps1` when ready.
+
+#### Components
+
+1. **Core recording engine** (`record.py`)
+   - WASAPI loopback: captures all system audio (Teams, Zoom, browser, any app)
+   - Microphone: captures user's voice
+   - Output: stereo WAV (L=mic, R=loopback), 48kHz 16-bit
+   - CLI mode: `python record.py --start` (Ctrl+C to stop)
+
+2. **System tray icon** (`recorder_tray.py`)
+   - Always-present tray icon (pystray)
+   - Right-click menu: Start / Stop / Quit
+   - Visual state: idle (gray) vs recording (red dot)
+   - Windows notification on start/stop
+
+3. **Floating recording widget** (`recorder_widget.py`)
+   - Small always-on-top tkinter window
+   - Shows: red REC indicator + elapsed time (MM:SS) + Stop button
+   - Appears on record start, hides on stop
+
+4. **App entry point** (`recorder_app.py`)
+   - Launches tray + widget + recorder, coordinates events
+
+#### Pipeline integration
+
+- `audio_enhance.py` handles stereo input (downmix to mono or split channels)
+- `transcribe.py` adds `--channel` flag: `both|left|right|mix` (default: mix)
+- File naming: `YYYY-MM-DD_HHMM_recording.wav`
+
+#### Limitations
+
+- WASAPI loopback captures ALL system audio (notifications, music, etc.) — not per-app
+- Large files: 48kHz stereo 16-bit ≈ 11 MB/min, ~660 MB/hour
+
+#### Dependencies
+
+```
+PyAudioWPatch>=0.2.12    # WASAPI loopback (only Python lib that supports it)
+pystray>=0.19.0          # system tray icon
+Pillow>=9.0.0            # icon generation for pystray
+```
+
 ### Phase 2: Multi-File Batch Processing + Reports
 
 **Goal**: Process entire folders of meetings and generate cross-meeting analytics.
@@ -137,7 +184,8 @@ numpy>=1.24.0
 
 ## 4. Non-Goals (out of scope for now)
 
-- Real-time / live transcription (streaming mic capture)
+- Real-time / live transcription (live capture records, but transcription is batch)
+- Per-app audio capture (WASAPI captures all system audio)
 - Web UI / dashboard
 - Mobile app
 - Video processing (face recognition, slide extraction)

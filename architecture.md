@@ -2,9 +2,17 @@
 
 ## System Overview
 
-SpyMeet is a sequential pipeline with four stages. Each stage is a standalone Python module that can run independently or be chained via `run.ps1`.
+SpyMeet is a sequential pipeline with five stages. Each stage is a standalone Python module that can run independently or be chained via `run.ps1`.
 
 ```
++---------------------+
+| recorder_app.py     |  Live audio capture (planned)
+|  record.py          |  WASAPI loopback + mic
+|  recorder_tray.py   |  system tray (pystray)
+|  recorder_widget.py |  floating widget (tkinter)
++--------+------------+
+         |  stereo WAV (L=mic, R=loopback)
+         v
                           +------------------+
                           |   run.ps1        |  PowerShell orchestrator
                           |  (env, keys,     |  loads .env, activates conda,
@@ -168,6 +176,24 @@ class CorrectedSegment:
 
 See section "2. audio_enhance.py" above.
 
+### Phase 1.5: Live Audio Capture — PLANNED
+
+```
+recorder_app.py  (entry point)
+    |
+    +-- record.py             <- core engine: PyAudioWPatch WASAPI loopback + mic
+    |     |                      two concurrent input streams, resampled + interleaved
+    |     +-> stereo WAV         L=mic, R=loopback, 48kHz 16-bit
+    |         ./audio/YYYY-MM-DD_HHMM_recording.wav
+    |
+    +-- recorder_tray.py      <- pystray system tray icon (Start/Stop/Quit menu)
+    +-- recorder_widget.py    <- tkinter floating window (timer + Stop button)
+```
+
+**Key constraint**: WASAPI loopback only works in shared mode and captures ALL system audio.
+**Pipeline integration**: `audio_enhance.py` downmixes stereo to mono; `transcribe.py` adds `--channel` flag.
+See `sprint_live_capture.md` for full implementation plan.
+
 ### Phase 2: Batch Processing
 
 ```
@@ -213,6 +239,11 @@ spymeet/
   transcribe.py         # Speech-to-text engine
   llm_process.py        # LLM correction + summary
   audio_enhance.py      # Audio preprocessing (always-on)
+  record.py             # (planned) Core WASAPI loopback + mic capture engine
+  recorder_tray.py      # (planned) System tray icon (pystray)
+  recorder_widget.py    # (planned) Floating recording widget (tkinter)
+  recorder_app.py       # (planned) Recorder entry point
+  sprint_live_capture.md # Sprint plan for live capture feature
   batch_report.py       # (planned) Cross-meeting analytics
   speaker_profiles.py   # (planned) Voice enrollment + matching
   audio/                # Input audio files (gitignored)

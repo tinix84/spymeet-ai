@@ -9,6 +9,9 @@ SpyMeet is a meeting audio transcription pipeline: audio -> (optional) audio enh
 ## Architecture
 
 ```
+recorder_app.py           (live capture: WASAPI loopback + mic → stereo WAV)
+    -> ./audio/YYYY-MM-DD_HHMM_recording.wav  (L=mic, R=system audio)
+
 Audio files (./audio/)
     -> audio_enhance.py   (always-on: normalize, denoise, EQ, compress)
     -> [name]_enhanced.wav
@@ -17,6 +20,8 @@ Audio files (./audio/)
     -> llm_process.py     (Claude API: correction + summary)
     -> [name]_corrected.txt + [name]_summary.md + [name]_metrics.md
 ```
+
+**recorder_app.py** -- (planned) Live audio capture. System tray icon (pystray) + floating widget (tkinter). Captures WASAPI loopback (system audio) + microphone simultaneously via PyAudioWPatch. Saves stereo WAV (L=mic, R=loopback) to `./audio/`. Manual start/stop, no auto-processing.
 
 **audio_enhance.py** -- Always-on audio preprocessing. Chain: load (soundfile/ffmpeg) -> EBU R128 normalization (-16 LUFS) -> spectral gating noise reduction -> speech EQ (HP 80Hz + peak 3kHz) -> dynamic compression (3:1). Output: 16-bit PCM WAV, 16kHz mono. Graceful fallback if deps missing (pyloudnorm, noisereduce, scipy, soundfile). Skips if `_enhanced.wav` is up-to-date.
 
@@ -34,6 +39,13 @@ Audio files (./audio/)
 - **_run_transcribe.ps1**: helper script with hardcoded paths for Windows PATH/env setup (machine-specific, gitignored)
 
 ## Commands
+
+### Recording (planned)
+```powershell
+python recorder_app.py                                # launch tray icon + widget
+python record.py --list-devices                       # list available audio devices
+python record.py --start                              # CLI-only recording (Ctrl+C to stop)
+```
 
 ### Running the pipeline
 ```powershell
@@ -69,3 +81,6 @@ python llm_process.py --input ./audio/transcripts/meeting.txt --glossary glossar
 - Audio files and transcripts are gitignored (large binaries / generated output)
 - Audio enhancement is always-on; `enhance_audio_files()` returns `(enhanced_files, stem_map)` — `stem_map` maps enhanced paths to original stems so transcripts keep original filenames
 - Enhancement deps (pyloudnorm, noisereduce, scipy, soundfile) are optional — if missing, transcribe.py falls back to raw audio with a warning
+- Live capture uses PyAudioWPatch (only Python lib supporting WASAPI loopback); sounddevice does NOT support it
+- WASAPI loopback captures ALL system audio — mute other apps during calls for clean recordings
+- Stereo recordings: L=mic, R=loopback. Pipeline downmixes to mono by default
