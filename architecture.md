@@ -2,16 +2,16 @@
 
 ## System Overview
 
-SpyMeet is a sequential pipeline with five stages. Each stage is a standalone Python module that can run independently or be chained via `run.ps1`.
+SpyMeet is a sequential pipeline with five stages plus a live recorder. Each stage is a standalone Python module that can run independently or be chained via `run.ps1`.
 
 ```
 +---------------------+
-| recorder_app.py     |  Live audio capture (planned)
-|  record.py          |  WASAPI loopback + mic
+| recorder_app.py     |  Live audio capture
+|  record.py          |  WASAPI loopback + mic (meeting)
 |  recorder_tray.py   |  system tray (pystray)
 |  recorder_widget.py |  floating widget (tkinter)
-+--------+------------+
-         |  stereo WAV (L=mic, R=loopback)
++--------+------------+  or mic-only (dictation)
+         |  stereo WAV (L=mic, R=loopback) / mono WAV
          v
                           +------------------+
                           |   run.ps1        |  PowerShell orchestrator
@@ -76,14 +76,14 @@ SpyMeet is a sequential pipeline with five stages. Each stage is a standalone Py
 
 | Step | Operation | Details |
 |------|-----------|---------|
-| 1 | Load | soundfile for WAV/FLAC/OGG, ffmpeg subprocess for M4A/MP4/MKV/WEBM → 16kHz mono float64 |
+| 1 | Load | soundfile for WAV/FLAC/OGG, ffmpeg subprocess for M4A/MP4/MKV/WEBM → 16kHz mono float64. Channel selection: `mix` (default downmix), `left`, `right` for stereo files |
 | 2 | Loudness normalization | pyloudnorm EBU R128, target -16 LUFS, clip to [-1,1] |
 | 3 | Noise reduction | noisereduce spectral gating, first 1s noise profile, `stationary=True`, `prop_decrease=0.8` |
 | 4 | Speech EQ | scipy Butterworth HP 80Hz (order 4) + biquad peaking +2.5dB @ 3kHz (Audio EQ Cookbook) |
 | 5 | Dynamic compression | Feed-forward 3:1 ratio, 10ms attack, 100ms release, adaptive threshold (mean RMS + 6dB), makeup via re-normalization |
 | 6 | Save | 16-bit PCM WAV, 16kHz mono |
 
-**Integration with transcribe.py**: Enhancement runs in `main()` before backend dispatch. `enhance_audio_files()` returns `(enhanced_files, stem_map)`. The `stem_map` maps enhanced file paths to original stems so transcripts keep original filenames (not `_enhanced`). If enhancement deps are missing, transcription proceeds on raw audio.
+**Integration with transcribe.py**: Enhancement runs in `main()` before backend dispatch. `enhance_audio_files()` accepts an optional `channel` parameter and returns `(enhanced_files, stem_map)`. The `stem_map` maps enhanced file paths to original stems so transcripts keep original filenames (not `_enhanced`). If enhancement deps are missing, transcription proceeds on raw audio. For stereo recordings, `--channel both` processes left (mic) and right (system) separately, producing `_mic` and `_system` suffixed transcripts.
 
 **Caching**: Skips enhancement if `_enhanced.wav` exists and is newer than the source file.
 
@@ -176,23 +176,27 @@ class CorrectedSegment:
 
 See section "2. audio_enhance.py" above.
 
-### Phase 1.5: Live Audio Capture — PLANNED
+### ~~Phase 1.5: Live Audio Capture + Dictation~~ — IMPLEMENTED
 
 ```
-recorder_app.py  (entry point)
+recorder_app.py  (entry point, tkinter mainloop on main thread)
     |
-    +-- record.py             <- core engine: PyAudioWPatch WASAPI loopback + mic
-    |     |                      two concurrent input streams, resampled + interleaved
-    |     +-> stereo WAV         L=mic, R=loopback, 48kHz 16-bit
-    |         ./audio/YYYY-MM-DD_HHMM_recording.wav
+    +-- record.py             <- Recorder class: two modes
+    |     |                      meeting: WASAPI loopback + mic → stereo WAV (L=mic, R=loopback)
+    |     |                      dictation: mic only → mono WAV (for LLM prompts)
+    |     +-> 48kHz 16-bit WAV   ./audio/YYYY-MM-DD_HHMM_recording.wav (meeting)
+    |                            ./audio/YYYY-MM-DD_HHMM_dictation.wav (dictation)
     |
-    +-- recorder_tray.py      <- pystray system tray icon (Start/Stop/Quit menu)
-    +-- recorder_widget.py    <- tkinter floating window (timer + Stop button)
+    +-- recorder_tray.py      <- pystray (daemon thread), PIL icons (gray/red)
+    |                            menu: Start Meeting / Start Dictation / Stop / Quit
+    +-- recorder_widget.py    <- tkinter floating window (dark theme, always-on-top)
+                                 blinking REC dot + timer + mode label + Stop button
 ```
+
+**Threading model**: tkinter mainloop on main thread, pystray in daemon thread, mixer/writer in daemon thread, PyAudio callbacks in internal threads. Cross-thread communication via `queue.Queue`.
 
 **Key constraint**: WASAPI loopback only works in shared mode and captures ALL system audio.
-**Pipeline integration**: `audio_enhance.py` downmixes stereo to mono; `transcribe.py` adds `--channel` flag.
-See `sprint_live_capture.md` for full implementation plan.
+**Pipeline integration**: `audio_enhance.py` supports `channel` parameter; `transcribe.py` adds `--channel` flag (`mix`/`left`/`right`/`both`).
 
 ### Phase 2: Batch Processing
 
@@ -238,12 +242,11 @@ spymeet/
   _run_transcribe.ps1   # Machine-specific helper (gitignored)
   transcribe.py         # Speech-to-text engine
   llm_process.py        # LLM correction + summary
-  audio_enhance.py      # Audio preprocessing (always-on)
-  record.py             # (planned) Core WASAPI loopback + mic capture engine
-  recorder_tray.py      # (planned) System tray icon (pystray)
-  recorder_widget.py    # (planned) Floating recording widget (tkinter)
-  recorder_app.py       # (planned) Recorder entry point
-  sprint_live_capture.md # Sprint plan for live capture feature
+  audio_enhance.py      # Audio preprocessing (always-on, channel selection)
+  record.py             # Core WASAPI loopback + mic capture engine (meeting + dictation)
+  recorder_tray.py      # System tray icon (pystray)
+  recorder_widget.py    # Floating recording widget (tkinter)
+  recorder_app.py       # Recorder entry point (tray + widget + recorder)
   batch_report.py       # (planned) Cross-meeting analytics
   speaker_profiles.py   # (planned) Voice enrollment + matching
   audio/                # Input audio files (gitignored)

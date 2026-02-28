@@ -344,6 +344,13 @@ def main():
                         help="Path to domain glossary .txt for LLM correction")
     parser.add_argument("--skip-llm", action="store_true",
                         help="Skip LLM correction + summary step")
+    parser.add_argument("--channel", default="mix",
+                        choices=["mix", "left", "right", "both"],
+                        help="Channel selection for stereo recordings:\n"
+                             "  mix   = downmix to mono (default)\n"
+                             "  left  = mic channel only\n"
+                             "  right = loopback/system audio only\n"
+                             "  both  = process L and R separately")
     args = parser.parse_args()
 
     input_path = Path(args.input)
@@ -373,45 +380,63 @@ def main():
     print(f"[INFO] Found {len(audio_files)} file(s) | Backend: {args.backend}")
 
     # Audio enhancement — always-on, graceful fallback
-    stem_map = {}
-    if ENHANCE_AVAILABLE:
-        print(f"\n[INFO] Audio enhancement: enabled")
-        audio_files, stem_map = enhance_audio_files(audio_files)
-    else:
-        print(f"\n[INFO] Audio enhancement: unavailable (install pyloudnorm, noisereduce, scipy, soundfile)")
-
     glossary_path = Path(args.glossary) if args.glossary else None
     hf_token = args.hf_token or os.environ.get("HF_TOKEN")
 
-    if args.backend == "cpu":
-        run_whisperx_cpu(
-            audio_files=audio_files,
-            output_dir=output_dir,
-            language=args.language,
-            model_name=args.model,
-            hf_token=hf_token,
-            glossary_path=glossary_path,
-            skip_llm=args.skip_llm,
-            stem_map=stem_map
-        )
-    elif args.backend == "openai-api":
-        run_openai_api(
-            audio_files=audio_files,
-            output_dir=output_dir,
-            language=args.language,
-            glossary_path=glossary_path,
-            skip_llm=args.skip_llm,
-            stem_map=stem_map
-        )
-    elif args.backend == "groq-api":
-        run_groq_api(
-            audio_files=audio_files,
-            output_dir=output_dir,
-            language=args.language,
-            glossary_path=glossary_path,
-            skip_llm=args.skip_llm,
-            stem_map=stem_map
-        )
+    # Channel "both" → process left and right separately
+    if args.channel == "both":
+        channel_passes = [("left", "_mic"), ("right", "_system")]
+    else:
+        channel_passes = [(args.channel, "")]
+
+    for channel, suffix in channel_passes:
+        if len(channel_passes) > 1:
+            label = "mic" if channel == "left" else "system audio"
+            print(f"\n{'='*50}")
+            print(f"[INFO] Processing {label} channel ({channel})")
+            print(f"{'='*50}")
+
+        stem_map = {}
+        current_files = list(audio_files)  # copy
+        if ENHANCE_AVAILABLE:
+            print(f"\n[INFO] Audio enhancement: enabled (channel={channel})")
+            current_files, stem_map = enhance_audio_files(current_files, channel=channel)
+        else:
+            print(f"\n[INFO] Audio enhancement: unavailable (install pyloudnorm, noisereduce, scipy, soundfile)")
+
+        # For "both" mode, append suffix to stems so transcripts don't overwrite
+        if suffix:
+            stem_map = {k: v + suffix for k, v in stem_map.items()}
+
+        if args.backend == "cpu":
+            run_whisperx_cpu(
+                audio_files=current_files,
+                output_dir=output_dir,
+                language=args.language,
+                model_name=args.model,
+                hf_token=hf_token,
+                glossary_path=glossary_path,
+                skip_llm=args.skip_llm,
+                stem_map=stem_map
+            )
+        elif args.backend == "openai-api":
+            run_openai_api(
+                audio_files=current_files,
+                output_dir=output_dir,
+                language=args.language,
+                glossary_path=glossary_path,
+                skip_llm=args.skip_llm,
+                stem_map=stem_map
+            )
+        elif args.backend == "groq-api":
+            run_groq_api(
+                audio_files=current_files,
+                output_dir=output_dir,
+                language=args.language,
+                glossary_path=glossary_path,
+                skip_llm=args.skip_llm,
+                stem_map=stem_map
+            )
 
     print(f"\n[DONE] Output folder: {output_dir}")
 

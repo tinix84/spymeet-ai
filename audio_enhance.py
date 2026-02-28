@@ -34,10 +34,17 @@ SUPPORTED_FORMATS = NATIVE_FORMATS | FFMPEG_FORMATS
 
 # ─── Loading ─────────────────────────────────────────────────────────────────
 
-def load_audio(path: Path) -> np.ndarray:
+def load_audio(path: Path, channel: str = "mix") -> np.ndarray:
     """Load audio file to mono float64 numpy array at TARGET_SR.
 
     Uses soundfile for native formats, ffmpeg subprocess for others.
+
+    Args:
+        path: Audio file path.
+        channel: Channel selection for stereo files:
+            "mix"   = downmix to mono (default, current behavior)
+            "left"  = left channel only (mic in meeting recordings)
+            "right" = right channel only (system audio in meeting recordings)
     """
     import soundfile as sf
 
@@ -52,7 +59,12 @@ def load_audio(path: Path) -> np.ndarray:
 
     # Convert to mono if stereo
     if audio.ndim > 1:
-        audio = audio.mean(axis=1)
+        if channel == "left":
+            audio = audio[:, 0]
+        elif channel == "right":
+            audio = audio[:, 1]
+        else:  # "mix"
+            audio = audio.mean(axis=1)
 
     # Resample if needed
     if sr != TARGET_SR:
@@ -253,16 +265,20 @@ def print_metrics(label: str, metrics: dict):
 
 # ─── Main enhancement pipeline ──────────────────────────────────────────────
 
-def enhance_audio(path: Path) -> Path:
+def enhance_audio(path: Path, channel: str = "mix") -> Path:
     """Enhance a single audio file. Returns path to enhanced WAV.
 
     Output: [name]_enhanced.wav in the same directory as the input.
+
+    Args:
+        path: Audio file path.
+        channel: Channel selection passed to load_audio ("mix", "left", "right").
     """
     path = Path(path)
     output_path = path.with_name(f"{path.stem}_enhanced.wav")
 
     print(f"  [enhance] Loading {path.name}...")
-    audio = load_audio(path)
+    audio = load_audio(path, channel=channel)
     duration_s = len(audio) / TARGET_SR
     mm, ss = divmod(int(duration_s), 60)
     print(f"  [enhance] Loaded: {mm}m{ss:02d}s, {TARGET_SR} Hz mono")
@@ -300,12 +316,16 @@ def enhance_audio(path: Path) -> Path:
     return output_path
 
 
-def enhance_audio_files(audio_files: list) -> tuple:
+def enhance_audio_files(audio_files: list, channel: str = "mix") -> tuple:
     """Enhance a batch of audio files. Returns (enhanced_files, stem_map).
 
     - Skips enhancement if _enhanced.wav already exists and is newer than source.
     - Falls back to original file on error.
     - stem_map: dict mapping enhanced Path -> original stem (for transcript naming).
+
+    Args:
+        audio_files: List of audio file paths.
+        channel: Channel selection passed to load_audio ("mix", "left", "right").
     """
     enhanced = []
     stem_map = {}
@@ -320,15 +340,15 @@ def enhance_audio_files(audio_files: list) -> tuple:
             stem_map[path] = path.stem.replace("_enhanced", "")
             continue
 
-        # Skip if enhanced file is up-to-date
-        if output_path.exists() and output_path.stat().st_mtime >= path.stat().st_mtime:
+        # Skip if enhanced file is up-to-date (only for default "mix" channel)
+        if channel == "mix" and output_path.exists() and output_path.stat().st_mtime >= path.stat().st_mtime:
             print(f"  [enhance] Skipping {path.name} — enhanced file is up-to-date")
             enhanced.append(output_path)
             stem_map[output_path] = path.stem
             continue
 
         try:
-            result = enhance_audio(path)
+            result = enhance_audio(path, channel=channel)
             enhanced.append(result)
             stem_map[result] = path.stem
         except Exception as e:

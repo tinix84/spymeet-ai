@@ -21,11 +21,17 @@ Audio files (./audio/)
     -> [name]_corrected.txt + [name]_summary.md + [name]_metrics.md
 ```
 
-**recorder_app.py** -- (planned) Live audio capture. System tray icon (pystray) + floating widget (tkinter). Captures WASAPI loopback (system audio) + microphone simultaneously via PyAudioWPatch. Saves stereo WAV (L=mic, R=loopback) to `./audio/`. Manual start/stop, no auto-processing.
+**record.py** -- Core recording engine. `Recorder` class with two modes: `meeting` (stereo: L=mic, R=WASAPI loopback, 48kHz 16-bit) and `dictation` (mono: mic only, for LLM prompts). Threaded mixer handles sample rate mismatch. CLI: `--list-devices`, `--start`, `--mode dictation`.
 
-**audio_enhance.py** -- Always-on audio preprocessing. Chain: load (soundfile/ffmpeg) -> EBU R128 normalization (-16 LUFS) -> spectral gating noise reduction -> speech EQ (HP 80Hz + peak 3kHz) -> dynamic compression (3:1). Output: 16-bit PCM WAV, 16kHz mono. Graceful fallback if deps missing (pyloudnorm, noisereduce, scipy, soundfile). Skips if `_enhanced.wav` is up-to-date.
+**recorder_app.py** -- Entry point for desktop recorder. Coordinates system tray icon (pystray, daemon thread), floating widget (tkinter, main thread), and Recorder instance via callbacks. Launch: `python recorder_app.py` or `python recorder_app.py --mode dictation`.
 
-**transcribe.py** -- Three backends: `cpu` (WhisperX local), `openai-api` (cloud), `groq-api` (free tier). Speaker diarization only available with WhisperX + HF_TOKEN. Groq API returns segments as dicts (not objects) -- use `isinstance(seg, dict)` checks. Enhancement runs automatically in `main()` before backend dispatch; `stem_map` ensures transcripts use original filenames.
+**recorder_tray.py** -- System tray icon (pystray). PIL-generated icons: gray=idle, red=recording. Menu: Start Meeting / Start Dictation / Stop / Quit.
+
+**recorder_widget.py** -- Floating tkinter widget (always-on-top, dark theme). Shows blinking REC dot, elapsed timer, mode label, and Stop button. Positioned bottom-right above taskbar.
+
+**audio_enhance.py** -- Always-on audio preprocessing. Chain: load (soundfile/ffmpeg) -> EBU R128 normalization (-16 LUFS) -> spectral gating noise reduction -> speech EQ (HP 80Hz + peak 3kHz) -> dynamic compression (3:1). Output: 16-bit PCM WAV, 16kHz mono. Graceful fallback if deps missing (pyloudnorm, noisereduce, scipy, soundfile). Skips if `_enhanced.wav` is up-to-date. Supports `channel` parameter (`mix`/`left`/`right`) for stereo recordings.
+
+**transcribe.py** -- Three backends: `cpu` (WhisperX local), `openai-api` (cloud), `groq-api` (free tier). Speaker diarization only available with WhisperX + HF_TOKEN. Groq API returns segments as dicts (not objects) -- use `isinstance(seg, dict)` checks. Enhancement runs automatically in `main()` before backend dispatch; `stem_map` ensures transcripts use original filenames. `--channel` flag (`mix`/`left`/`right`/`both`) for stereo recordings; `both` processes L and R separately with `_mic`/`_system` suffixes.
 
 **llm_process.py** -- Two-stage Claude pipeline: (1) chunk transcript into ~5min segments, correct fillers/punctuation, retry warned segments up to 3x; (2) generate Markdown meeting summary. Uses `claude-haiku-4-5-20251001`.
 
@@ -40,11 +46,14 @@ Audio files (./audio/)
 
 ## Commands
 
-### Recording (planned)
+### Recording
 ```powershell
-python recorder_app.py                                # launch tray icon + widget
+python recorder_app.py                                # launch tray icon + widget (idle)
+python recorder_app.py --mode meeting                 # launch and auto-start meeting recording
+python recorder_app.py --mode dictation               # launch and auto-start dictation
 python record.py --list-devices                       # list available audio devices
-python record.py --start                              # CLI-only recording (Ctrl+C to stop)
+python record.py --start                              # CLI meeting recording (Ctrl+C to stop)
+python record.py --start --mode dictation             # CLI dictation mode (mic only)
 ```
 
 ### Running the pipeline
@@ -55,6 +64,13 @@ python record.py --start                              # CLI-only recording (Ctrl
 .\run.ps1 -SkipLLM -Language it                       # transcribe only
 .\run.ps1 -LLMOnly -Input .\audio\transcripts         # LLM-only on existing .txt
 .\run.ps1 -Glossary .\glossary.txt -Language it       # with domain terminology
+```
+
+### Channel selection (stereo recordings)
+```powershell
+python transcribe.py --input ./audio/rec.wav --channel right    # system audio only
+python transcribe.py --input ./audio/rec.wav --channel left     # mic only
+python transcribe.py --input ./audio/rec.wav --channel both     # L and R separately (_mic/_system)
 ```
 
 ### Standalone LLM processing
@@ -83,4 +99,7 @@ python llm_process.py --input ./audio/transcripts/meeting.txt --glossary glossar
 - Enhancement deps (pyloudnorm, noisereduce, scipy, soundfile) are optional — if missing, transcribe.py falls back to raw audio with a warning
 - Live capture uses PyAudioWPatch (only Python lib supporting WASAPI loopback); sounddevice does NOT support it
 - WASAPI loopback captures ALL system audio — mute other apps during calls for clean recordings
-- Stereo recordings: L=mic, R=loopback. Pipeline downmixes to mono by default
+- Stereo recordings: L=mic, R=loopback. Pipeline downmixes to mono by default. Use `--channel` to select specific channels
+- Dictation mode records mic-only mono WAV for voice prompts / LLM input
+- Recorder deps: PyAudioWPatch, pystray, Pillow (PIL). All optional — only needed for live capture
+- Recording widget uses tkinter mainloop on main thread; pystray runs in daemon thread; communication via queue.Queue

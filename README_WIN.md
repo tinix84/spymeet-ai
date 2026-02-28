@@ -1,21 +1,26 @@
-# Whisper Transcriber — Windows + GPU
+# SpyMeet — Windows + GPU
 
-Pipeline completa: trascrizione audio → correzione LLM → summary riunione.
-WhisperX (Whisper large-v3) + Claude (Anthropic API).
+Pipeline completa: registrazione audio → preprocessing → trascrizione → correzione LLM → summary riunione.
+Registrazione live (WASAPI loopback + microfono) + WhisperX + Claude (Anthropic API).
 
 ---
 
 ## Struttura del progetto
 
 ```
-D:\OneDrive\claude\spymeet\
+spymeet\
 ├── check_gpu.ps1       ← STEP 1: rileva GPU e CUDA
 ├── setup.ps1           ← STEP 2: installa tutto
 ├── run.ps1             ← STEP 3: lancia la pipeline
-├── transcribe.py       ← motore trascrizione (WhisperX)
+├── recorder_app.py     ← registratore desktop (tray + widget)
+├── record.py           ← motore registrazione (WASAPI loopback + mic)
+├── recorder_tray.py    ← icona system tray
+├── recorder_widget.py  ← widget floating (timer + stop)
+├── audio_enhance.py    ← preprocessing audio (automatico)
+├── transcribe.py       ← motore trascrizione (WhisperX / API)
 ├── llm_process.py      ← motore LLM (correzione + summary)
 ├── glossary.txt        ← opzionale: termini tecnici/nomi
-└── audio\              ← metti qui i file audio/video
+└── audio\              ← file audio (registrati o importati)
     └── transcripts\    ← output (creato automaticamente)
 ```
 
@@ -52,7 +57,7 @@ Stampa la tua GPU, versione CUDA, e salva `gpu_config.json`.
 ```powershell
 .\setup.ps1
 ```
-Installa automaticamente: ffmpeg, PyTorch (versione GPU corretta), whisperx, anthropic.
+Installa automaticamente: ffmpeg, PyTorch, whisperx, anthropic, PyAudioWPatch (registrazione), pystray, Pillow.
 
 ### Step 5 — Configura le chiavi
 
@@ -82,6 +87,32 @@ notepad $PROFILE
 
 ## Utilizzo
 
+### Registrazione audio
+
+**App desktop** (icona nel system tray + widget floating):
+```powershell
+python recorder_app.py                    # avvia app (usa menu tray per Start/Stop)
+python recorder_app.py --mode meeting     # avvia subito in modalita riunione
+python recorder_app.py --mode dictation   # avvia subito in modalita dettatura
+```
+
+**CLI** (Ctrl+C per fermare):
+```powershell
+python record.py --list-devices           # mostra microfono e dispositivo loopback
+python record.py --start                  # registra riunione (stereo: L=mic, R=audio sistema)
+python record.py --start --mode dictation # registra dettatura (mono: solo microfono, per prompt LLM)
+```
+
+**Modalita**:
+- **Meeting**: cattura audio sistema (Teams, Zoom, browser) + microfono → stereo WAV
+- **Dictation**: solo microfono → mono WAV. Utile per dettare prompt lunghi per LLM
+
+I file vengono salvati in `audio\` con formato `YYYY-MM-DD_HHMM_recording.wav` o `_dictation.wav`.
+
+> **Nota**: WASAPI loopback cattura TUTTO l'audio di sistema. Silenzia altre app durante le registrazioni.
+
+---
+
 ### Pipeline completa (trascrivi + correggi + summary)
 ```powershell
 .\run.ps1 -Language it
@@ -108,6 +139,14 @@ notepad $PROFILE
 ### Con glossario tecnico
 ```powershell
 .\run.ps1 -Language it -Glossary .\glossary.txt
+```
+
+### Selezione canale (registrazioni stereo)
+```powershell
+python transcribe.py --input ./audio/rec.wav --channel mix     # downmix mono (default)
+python transcribe.py --input ./audio/rec.wav --channel left    # solo microfono
+python transcribe.py --input ./audio/rec.wav --channel right   # solo audio sistema
+python transcribe.py --input ./audio/rec.wav --channel both    # processa L e R separatamente
 ```
 
 ### Modello più veloce (meno preciso)

@@ -16,16 +16,20 @@ SpyMeet transforms raw meeting audio into actionable, structured intelligence. I
 | Meeting summary | Working | Structured Markdown: participants, decisions, action items, open questions |
 | Correction metrics | Working | Confidence scores, word-level diffs, semantic preservation scores per segment |
 | Glossary support | Working | Domain-specific term correction via glossary.txt |
+| Audio enhancement | Working | EBU R128 normalization, spectral gating, speech EQ, dynamic compression. Channel selection (mix/left/right) for stereo |
+| Live audio capture | Working | WASAPI loopback + mic → stereo WAV. Desktop app (tray icon + floating widget) or CLI |
+| Dictation mode | Working | Mic-only mono recording for voice prompts / LLM input |
 | Windows pipeline | Working | PowerShell scripts (check_gpu, setup, run) with conda environment |
 
 ### Known limitations
 
-- No audio preprocessing -- raw audio goes directly to transcription
 - API backends (Groq, OpenAI) cannot diarize speakers
 - No batch analytics across multiple meetings
 - Speaker identification is manual (LLM-inferred from context, not voice-based)
 - No web interface -- CLI only
 - LLM step requires separate ANTHROPIC_API_KEY (not included in Claude Code Max OAuth)
+- WASAPI loopback captures ALL system audio (not per-app) -- mute other apps for clean recordings
+- Live capture is Windows-only (WASAPI is a Windows API)
 
 ## 3. Roadmap
 
@@ -75,39 +79,42 @@ scipy>=1.10.0
 soundfile>=0.12.0
 ```
 
-### Phase 1.5: Live Audio Capture
+### ~~Phase 1.5: Live Audio Capture + Dictation~~ — IMPLEMENTED
 
-**Goal**: Eliminate manual audio file export by capturing system audio (calls, meetings) directly from Windows.
+**Goal**: Eliminate manual audio file export by capturing system audio (calls, meetings) directly from Windows. Also supports mic-only dictation mode for recording voice prompts to feed into LLMs.
 
-**Behavior**: Desktop app with system tray icon. Manual start/stop. Saves stereo WAV to `./audio/`. No auto-processing — user runs `run.ps1` when ready.
+**Behavior**: Desktop app with system tray icon. Manual start/stop. Two modes: meeting (stereo) and dictation (mono). Saves WAV to `./audio/`. No auto-processing — user runs `run.ps1` when ready.
 
 #### Components
 
 1. **Core recording engine** (`record.py`)
-   - WASAPI loopback: captures all system audio (Teams, Zoom, browser, any app)
-   - Microphone: captures user's voice
-   - Output: stereo WAV (L=mic, R=loopback), 48kHz 16-bit
-   - CLI mode: `python record.py --start` (Ctrl+C to stop)
+   - `Recorder` class with `start()`/`stop()` API
+   - **Meeting mode**: WASAPI loopback + mic → stereo WAV (L=mic, R=loopback), 48kHz 16-bit
+   - **Dictation mode**: mic only → mono WAV, 48kHz 16-bit (for LLM prompts)
+   - Threaded mixer handles sample rate mismatch (resamples via scipy)
+   - CLI mode: `python record.py --start [--mode dictation]` (Ctrl+C to stop)
 
 2. **System tray icon** (`recorder_tray.py`)
-   - Always-present tray icon (pystray)
-   - Right-click menu: Start / Stop / Quit
-   - Visual state: idle (gray) vs recording (red dot)
-   - Windows notification on start/stop
+   - pystray tray icon with PIL-generated icons (gray=idle, red=recording)
+   - Right-click menu: Start Meeting / Start Dictation / Stop / Quit
+   - Windows notification on stop with file path
 
 3. **Floating recording widget** (`recorder_widget.py`)
-   - Small always-on-top tkinter window
-   - Shows: red REC indicator + elapsed time (MM:SS) + Stop button
-   - Appears on record start, hides on stop
+   - Always-on-top tkinter window (dark theme, 260x80px)
+   - Shows: blinking REC dot + elapsed timer + mode label + Stop button
+   - Positioned bottom-right above taskbar
 
 4. **App entry point** (`recorder_app.py`)
-   - Launches tray + widget + recorder, coordinates events
+   - Launches tray (daemon thread) + widget (main thread) + Recorder
+   - Wires callbacks for start/stop/quit coordination
+   - Optional `--mode` flag for auto-start on launch
 
 #### Pipeline integration
 
-- `audio_enhance.py` handles stereo input (downmix to mono or split channels)
-- `transcribe.py` adds `--channel` flag: `both|left|right|mix` (default: mix)
-- File naming: `YYYY-MM-DD_HHMM_recording.wav`
+- `audio_enhance.py` supports `channel` parameter (`mix`/`left`/`right`) for stereo files
+- `transcribe.py` adds `--channel` flag: `mix|left|right|both` (default: mix)
+- `both` mode processes L and R separately, producing `_mic` and `_system` suffixed transcripts
+- File naming: `YYYY-MM-DD_HHMM_recording.wav` (meeting), `YYYY-MM-DD_HHMM_dictation.wav` (dictation)
 
 #### Limitations
 
@@ -184,7 +191,7 @@ numpy>=1.24.0
 
 ## 4. Non-Goals (out of scope for now)
 
-- Real-time / live transcription (live capture records, but transcription is batch)
+- Real-time / live transcription (recorder captures audio, but transcription is batch)
 - Per-app audio capture (WASAPI captures all system audio)
 - Web UI / dashboard
 - Mobile app

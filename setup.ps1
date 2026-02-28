@@ -129,6 +129,12 @@ Write-Host "[8b] Installing audio enhancement dependencies..." -ForegroundColor 
 & pip install "pyloudnorm>=0.1.0" "noisereduce>=3.0.0" "scipy>=1.10.0" "soundfile>=0.12.0" --quiet
 Write-Host "     pyloudnorm + noisereduce + scipy + soundfile installed." -ForegroundColor Green
 
+# ── 9c. Install recording dependencies ──────────────────────────────────────
+Write-Host ""
+Write-Host "[8c] Installing recording dependencies..." -ForegroundColor Yellow
+& pip install "PyAudioWPatch>=0.2.12" "pystray>=0.19.0" "Pillow>=9.0.0" --quiet
+Write-Host "     PyAudioWPatch + pystray + Pillow installed." -ForegroundColor Green
+
 # ── 10. Verify GPU is visible to PyTorch ──────────────────────────────────────
 Write-Host ""
 Write-Host "[9] Verifying PyTorch GPU access..." -ForegroundColor Yellow
