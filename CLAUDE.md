@@ -37,6 +37,14 @@ Audio files (./audio/)
 
 **glossary.txt** -- One term per line, optionally with `=` descriptions. Fed to LLM for domain-specific term correction.
 
+**pipeline_runner.py** -- Background subprocess executor for transcribe.py, audio_enhance.py, and llm_process.py. Handles .env loading (key mapping: groq_api→GROQ_API_KEY, etc.), conda Python discovery (social_env), ffmpeg PATH injection. Thread-safe status/completion callbacks to widget.
+
+**diagnostics_window.py** -- Toplevel tkinter window (~400x350) with WASAPI device probing (mic + loopback pass/fail) and live VU meters at ~20fps. Own PyAudio instance, disabled during active recording.
+
+## Documentation
+
+- **[docs/competitive_analysis.md](docs/competitive_analysis.md)** -- Competitive landscape analysis of 12 open-source meeting transcription tools, with deep-dives on Meetily, Ecoute, WhisperLive, Scriberr, noScribe, Hearsay. Fork assessments, feature comparison matrix, cherry-pick recommendations. Conclusion: keep building SpyMeet, don't fork.
+
 ## Environment
 
 - **Python env**: conda `social_env` (Python 3.13+), NOT venv
