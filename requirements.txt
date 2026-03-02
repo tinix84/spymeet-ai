@@ -1,0 +1,24 @@
+# SpyMeet dependencies
+# Install: pip install -r requirements.txt
+
+# Core
+numpy
+soundfile
+
+# Recorder (desktop app — WASAPI loopback + system tray)
+PyAudioWPatch
+pystray
+Pillow
+
+# Pipeline — Transcription
+groq
+openai
+# whisperx  # CPU backend, optional (requires torch)
+
+# Pipeline — LLM correction + summary
+anthropic
+
+# Audio Enhancement (optional — graceful fallback if missing)
+pyloudnorm
+noisereduce
+scipy

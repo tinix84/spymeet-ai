@@ -1,15 +1,18 @@
 # Environment & secrets
 .env
 .env.*
+!.env.example
 
 # Python
 __pycache__/
 *.pyc
 *.pyo
 *.egg-info/
+.pytest_cache/
+
+# Build output (PyInstaller)
 dist/
 build/
-*.spec
 
 # Virtual environments
 venv/

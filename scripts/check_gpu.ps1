@@ -1,6 +1,11 @@
 # check_gpu.ps1
 # Detects GPU type, CUDA version, and prints the correct PyTorch install command.
-# Run first before setup.ps1
+# Run first before scripts/setup.ps1
+#
+# Run from project root: .\scripts\check_gpu.ps1
+
+# Resolve project root (one level up from scripts/)
+$ProjectRoot = (Resolve-Path "$PSScriptRoot\..").Path
 
 Write-Host ""
 Write-Host "============================================" -ForegroundColor Cyan
@@ -108,7 +113,7 @@ if ($isNvidia -and $cudaVersion) {
         torch_index  = $torchIndex
         device       = "cuda"
     }
-    $config | ConvertTo-Json | Set-Content "gpu_config.json"
+    $config | ConvertTo-Json | Set-Content "$ProjectRoot\gpu_config.json"
     Write-Host "  Saved config to gpu_config.json" -ForegroundColor Green
 
 } elseif ($isNvidia -and -not $cudaVersion) {
@@ -118,7 +123,7 @@ if ($isNvidia -and $cudaVersion) {
     Write-Host "  3. Re-run this script" -ForegroundColor Yellow
 
     $config = [ordered]@{ device = "cpu" }
-    $config | ConvertTo-Json | Set-Content "gpu_config.json"
+    $config | ConvertTo-Json | Set-Content "$ProjectRoot\gpu_config.json"
 } else {
     Write-Host "  No NVIDIA GPU - CPU mode" -ForegroundColor Yellow
     Write-Host "  pip install torch torchaudio" -ForegroundColor White
@@ -127,9 +132,9 @@ if ($isNvidia -and $cudaVersion) {
     Write-Host "  A 1h recording may take 1-3h on CPU." -ForegroundColor Yellow
 
     $config = [ordered]@{ device = "cpu" }
-    $config | ConvertTo-Json | Set-Content "gpu_config.json"
+    $config | ConvertTo-Json | Set-Content "$ProjectRoot\gpu_config.json"
 }
 
 Write-Host ""
-Write-Host "Next step: run .\setup.ps1" -ForegroundColor Cyan
+Write-Host "Next step: run .\scripts\setup.ps1" -ForegroundColor Cyan
 Write-Host ""

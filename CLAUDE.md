@@ -43,7 +43,19 @@ Audio files (./audio/)
 
 ## Documentation
 
+All detailed docs live in `docs/`:
+
+- **[docs/PRD.md](docs/PRD.md)** -- Product requirements, current state, and 3-phase roadmap (audio enhance, batch, speaker profiles).
+- **[docs/architecture.md](docs/architecture.md)** -- System architecture, data model, and planned changes.
 - **[docs/competitive_analysis.md](docs/competitive_analysis.md)** -- Competitive landscape analysis of 12 open-source meeting transcription tools, with deep-dives on Meetily, Ecoute, WhisperLive, Scriberr, noScribe, Hearsay. Fork assessments, feature comparison matrix, cherry-pick recommendations. Conclusion: keep building SpyMeet, don't fork.
+- **[docs/sprint_live_capture.md](docs/sprint_live_capture.md)** -- Live audio capture sprint plan.
+- **[docs/README_WIN.md](docs/README_WIN.md)** -- User-facing setup guide (Italian).
+
+## Packaging
+
+- **requirements.txt** -- Pinned Python dependencies (core, recorder, pipeline, enhancement groups).
+- **.env.example** -- Template for API keys. Copy to `.env` and fill in values.
+- **recorder.spec** -- PyInstaller build config for the desktop app.
 
 ## Environment
 
@@ -66,12 +78,12 @@ python record.py --start --mode dictation             # CLI dictation mode (mic 
 
 ### Running the pipeline
 ```powershell
-.\run.ps1 -Language it                                # full pipeline (transcribe + LLM)
-.\run.ps1 -Backend groq-api -Language it              # Groq free tier (fast, recommended)
-.\run.ps1 -Backend openai-api -Language de            # OpenAI Whisper API
-.\run.ps1 -SkipLLM -Language it                       # transcribe only
-.\run.ps1 -LLMOnly -Input .\audio\transcripts         # LLM-only on existing .txt
-.\run.ps1 -Glossary .\glossary.txt -Language it       # with domain terminology
+.\scripts\run.ps1 -Language it                                # full pipeline (transcribe + LLM)
+.\scripts\run.ps1 -Backend groq-api -Language it              # Groq free tier (fast, recommended)
+.\scripts\run.ps1 -Backend openai-api -Language de            # OpenAI Whisper API
+.\scripts\run.ps1 -SkipLLM -Language it                       # transcribe only
+.\scripts\run.ps1 -LLMOnly -Input .\audio\transcripts         # LLM-only on existing .txt
+.\scripts\run.ps1 -Glossary .\glossary.txt -Language it       # with domain terminology
 ```
 
 ### Channel selection (stereo recordings)

@@ -1,17 +1,17 @@
 # run.ps1
 # Launch transcription + LLM pipeline.
-# Must run setup.ps1 first.
+# Must run scripts/setup.ps1 first.
 #
-# Examples:
-#   .\run.ps1 -Backend cpu -Language it
-#   .\run.ps1 -Backend openai-api -Language it
-#   .\run.ps1 -Backend openai-api -Language de -Input D:\recordings
-#   .\run.ps1 -Backend cpu -Language it -SkipLLM
-#   .\run.ps1 -LLMOnly -Input .\audio\transcripts
+# Examples (run from project root):
+#   .\scripts\run.ps1 -Backend cpu -Language it
+#   .\scripts\run.ps1 -Backend openai-api -Language it
+#   .\scripts\run.ps1 -Backend openai-api -Language de -Input D:\recordings
+#   .\scripts\run.ps1 -Backend cpu -Language it -SkipLLM
+#   .\scripts\run.ps1 -LLMOnly -Input .\audio\transcripts
 
 param(
     [string]$Backend  = "cpu",         # cpu | openai-api
-    [string]$Input    = ".\audio",
+    [string]$Input    = "",
     [string]$Output   = "",
     [string]$Language = "",            # it, de, en - empty = auto-detect
     [string]$Model    = "large-v3",    # WhisperX model (cpu backend only)
@@ -22,7 +22,10 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$VenvDir = "venv"
+
+# Resolve project root (one level up from scripts/)
+$ProjectRoot = (Resolve-Path "$PSScriptRoot\..").Path
+if (-not $Input) { $Input = "$ProjectRoot\audio" }
 
 Write-Host ""
 Write-Host "============================================" -ForegroundColor Cyan
@@ -72,7 +75,7 @@ if ($Backend -eq "cpu") {
 # Build and run command
 if ($LLMOnly) {
     Write-Host "Mode: LLM only" -ForegroundColor Green
-    $cmdArgs = @("llm_process.py", "--input", $Input)
+    $cmdArgs = @("$ProjectRoot\llm_process.py", "--input", $Input)
     if ($Glossary) { $cmdArgs += @("--glossary", $Glossary) }
     if ($Output)   { $cmdArgs += @("--output",   $Output)   }
     Write-Host "  python $($cmdArgs -join ' ')" -ForegroundColor DarkGray
@@ -80,7 +83,7 @@ if ($LLMOnly) {
     & python @cmdArgs
 } else {
     Write-Host "Mode: $Backend transcription + LLM" -ForegroundColor Green
-    $cmdArgs = @("transcribe.py", "--input", $Input, "--backend", $Backend)
+    $cmdArgs = @("$ProjectRoot\transcribe.py", "--input", $Input, "--backend", $Backend)
     if ($Language) { $cmdArgs += @("--language", $Language) }
     if ($Output)   { $cmdArgs += @("--output",   $Output)   }
     if ($Glossary) { $cmdArgs += @("--glossary", $Glossary) }

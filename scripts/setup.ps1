@@ -1,7 +1,9 @@
 # setup.ps1
-# Full automated setup for Whisper Transcriber on Windows.
+# Full automated setup for SpyMeet on Windows.
 # Reads gpu_config.json produced by check_gpu.ps1.
 # Creates venv, installs PyTorch (GPU or CPU), whisperx, anthropic.
+#
+# Run from project root: .\scripts\setup.ps1
 
 param(
     [string]$VenvDir = "venv",
@@ -9,6 +11,9 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+# Resolve project root (one level up from scripts/)
+$ProjectRoot = (Resolve-Path "$PSScriptRoot\..").Path
 
 Write-Host ""
 Write-Host "============================================" -ForegroundColor Cyan
@@ -29,13 +34,14 @@ if ($policy -eq "Restricted") {
 $device = "cpu"
 $torchIndex = $null
 
-if (Test-Path "gpu_config.json") {
-    $config = Get-Content "gpu_config.json" | ConvertFrom-Json
+$gpuConfigPath = "$ProjectRoot\gpu_config.json"
+if (Test-Path $gpuConfigPath) {
+    $config = Get-Content $gpuConfigPath | ConvertFrom-Json
     $device = $config.device
     $torchIndex = $config.torch_index
     Write-Host "[0] GPU config loaded: device=$device" -ForegroundColor Green
 } else {
-    Write-Host "[0] gpu_config.json not found — run check_gpu.ps1 first." -ForegroundColor Yellow
+    Write-Host "[0] gpu_config.json not found — run scripts\check_gpu.ps1 first." -ForegroundColor Yellow
     Write-Host "    Defaulting to CPU mode." -ForegroundColor Yellow
 }
 
@@ -163,7 +169,7 @@ Write-Host "============================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor White
 Write-Host "  1. Put audio files in .\audio\" -ForegroundColor White
-Write-Host "  2. Run: .\run.ps1 -Language it" -ForegroundColor White
+Write-Host "  2. Run: .\scripts\run.ps1 -Language it" -ForegroundColor White
 Write-Host "  3. Find outputs in .\audio\transcripts\" -ForegroundColor White
 Write-Host ""
 Write-Host "For HuggingFace diarization token setup, see README.md" -ForegroundColor Yellow
